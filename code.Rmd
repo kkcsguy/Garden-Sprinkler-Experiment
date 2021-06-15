@@ -1,0 +1,535 @@
+---
+title: "Garden Sprinkler Experiment"
+author: "Haolan Mai"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r,warning=FALSE,message=FALSE,echo=FALSE}
+library(corrplot)
+library(readr)
+library(FrF2)
+library(AlgDesign)
+```
+
+
+
+# I. Introduction
+
+Watering a garden or lawn by hand is not an easy task. If the garden is large, it may take up a lot of time. In order to promote garden watering, garden sprinklers appeared. Nowadays, there are a lot of benefits we can get from installing a garden sprinkler, and the automatic sprinkler system also is the best investment for the garden. It can bring healthy and beautiful lawns. While saving money, it also saves a lot of time, allowing people to devote more time to activities they really like.
+
+- Convenience: We can set a sprinkler system that will automatically water the garden at fixed points and water the lawn instead of watering by ourselves, which could save valuable time and have more leisure time. Regular and quantitative watering is also more convenient to keep the lawn healthy and green, without drying up.
+
+- Aesthetics and safety: There’s nothing attractive about a garden hose stretching across the lawn. The hose is also a tripping hazard for children and pets playing in the yard. In contrast, the garden sprinkler is much more Aesthetics and safe than the hose which makes it a more pleasing option.  
+
+- Water the optimal amount: Advanced garden sprinkler systems feature weather and soil moisture sensors to deliver the right amount of water right when it’s needed, and watering more evenly than ourselves.  In addition, the automatic irrigation system can be programmed to discharge a more precise amount of water in the target area, thereby promoting water conservation (saving money).
+
+When defining if a garden sprinkler is at its high quality, its low consumption of water and the wide spray range are significant criterias. There are eight factors affecting the quality of the garden sprinkler which are  vertical nozzle angle, tangential nozzle angle, nozzle profile, diameter sprinkler head, static friction moment, dynamic friction moment, entrance pressure, and diameter flow line. The goals of our project are to identify the factors those are significantly affect the  water consumption and spray range and figure out the optimal  factors’ setting to minimize the water consumption and maximize the spray range. To achieve the goals, we will design the experiment , analysis the experimental results and draw the conclusions.
+
+Research Question:  
+- What is the relevant factors that drive the water consumption and spray range ?.  
+- What is the optimal factors’ settings that maximize the spray range and minimize the water consumption?
+
+
+## Part I: Design of Experiment 
+
+### Question 1. Propose a cost-efficient experimental design. Motivate your decision in statistical and practical terms.
+
+In this experiment, we aim to find the relevant factors and determine the best combination of garden sprinklers to minimize water consumption and maximize the spray range. We first consider eight factors. If we want a full factorial design, we need a total of 2^8(256) runs to complete all combinations. However, the maximum number of tests for the entire experiment process allowed by the budget is 20 (N). In this case, a full factorial design will not work. Therefore, as a substitute, we choose the regular part analysis factor design. The smallest regular partial factor of 8 factors that we can use is a 16-run 2^(8-4) fractional factorial design. Therefore, we finally decided to perform a 2^(8-4) fractional factorial design.
+
+```{r,message=FALSE,echo=FALSE}
+factor.names=list(alpha=c(0,90),
+                  beta=c(0,90),
+                  Aq=c(2e-06,4e-06),
+                  d=c(0.1,0.2),
+                  mt=c(0.01,0.02),
+                  mf=c(0.01,0.02),
+                  pin=c(1,2),
+                  dzul=c(5,10))
+# Design to create txt
+design <- FrF2(16, 8, factor.names = factor.names, randomize = FALSE)
+design.info(design)$catlg.entry
+design.df <- data.frame(design)
+design.df
+write.table(design.df,"design.txt",sep="\t",quote=FALSE,dec=".",row.names=FALSE)
+# Read output from web
+result <- read_csv("result.txt")
+# Append output to design
+data1 <- data.frame(desnum(design))
+data1
+```
+
+### Question 2. What is the performance of your design for studying the main effects of the factors only? Can your design estimate all two-factor interactions? Why or why not?
+
+**We can visualize the aliasing in this design using a color map on correlations.**
+
+```{r,echo=FALSE}
+generators(design)
+design.info(design)$aliased
+X.one <- model.matrix(~(alpha + beta + Aq + d + mt + mf + pin + dzul)^2-1, data.frame(data1))
+contrast.vectors.correlations.one <- cor(X.one)
+par(mfrow=c(1,2))
+corrplot(contrast.vectors.correlations.one[1:8,1:8], 
+         type = "full", addgrid.col = "gray",
+        tl.col = "black", tl.srt = 90, method = "color", tl.cex=0.8)
+corrplot(contrast.vectors.correlations.one, type = "full", addgrid.col = "gray",
+         tl.col = "black", tl.srt = 90, method = "color", tl.cex=0.8,
+         )
+```
+
+**If we assume that the two-factor interactions are negligible, the aliasing structure of the design for the model involving only the main effects is excellent. There is no aliasing among the main effects.That is, the performance of the design for studying the main effects of the factors only is pretty good.**
+
+If we consider a model including the main effects only, then we can study the variance inflation factors for the estimates of the coefficients in this model.
+
+```{r,echo=FALSE}
+X.opt.me <- model.matrix(~(alpha+beta+Aq+d+mt+mf+pin+dzul), data.frame(data1))
+XtX <- t(X.opt.me)%*%X.opt.me
+inv.XtX <- solve(XtX)
+var.eff <- diag(inv.XtX)
+cat("Variance the estimates when sigma^2 = 1 \n")
+print(var.eff) 
+cat("\n Variance inflation factors \n")
+print(nrow(data1)*var.eff)
+```
+
+**However,our design cannot estimate all two-factor interactions because there are some pairs of interaction that have a large correlation rate with other pairs, meaning they are aliasing with each other. **
+
+
+
+### Question 3. The production engineers are concerned about having some failed tests in the experiment, given by sprinklers which cannot spray water. If you remove two randomly chosen test combinations, what is the performance of the resulting design?
+
+
+```{r,echo=FALSE}
+set.seed(888)
+data1.removed <- data1[-sample(1:16,2,replace = F),]
+
+X.one.removed <- model.matrix(~(alpha + beta + Aq + d + mt + mf + pin + dzul)^2-1, data.frame(data1.removed))
+contrast.vectors.correlations.one.removed <- cor(X.one.removed)
+
+corrplot(contrast.vectors.correlations.one.removed[1:8,1:8], 
+         type = "full", addgrid.col = "gray",
+         tl.col = "black", tl.srt = 90, method = "color", tl.cex=0.8)
+corrplot(contrast.vectors.correlations.one.removed, type = "full", addgrid.col = "gray",
+         tl.col = "black", tl.srt = 90, method = "color", tl.cex=0.8)
+```
+
+```{r,echo=FALSE}
+X.opt.me.removed <- model.matrix(~(alpha+beta+Aq+d+mt+mf+pin+dzul), data.frame(data1.removed))
+XtX.removed <- t(X.opt.me.removed)%*%X.opt.me.removed
+inv.XtX.removed <- solve(XtX.removed)
+var.eff.removed <- diag(inv.XtX.removed)
+cat("Variance the estimates when sigma^2 = 1 \n")
+print(var.eff.removed) 
+cat("\n Variance inflation factors \n")
+print(nrow(data1.removed)*var.eff.removed)
+```
+
+
+**The main effects are confounded with other main effects as well as interactions.The resulting design has worse performance than the previous one.**
+
+
+
+
+### Question 4. The production engineers took an introductory course in experimental design. Using a commercial software, they came up with the experimental plan shown in Table 2. How does your full design compare with this one?
+
+
+## alternative exprimental design
+
+```{r,echo=FALSE}
+
+A <- c(-1,0,-1,-1,1,-1,1,-1,-1,1,1,1,-1,1,0,0,1)
+B <- c(1,0,1,-1,-1,0,1,-1,-1,-1,1,1,1,-1,-1,1,0)
+C <- c(-1,0,1,1,-1,-1,-1,1,-1,1,1,-1,0,0,-1,1,1)
+D <- c(1,0,0,-1,0,-1,-1,1,1,-1,-1,1,-1,1,-1,1,1)
+E <- c(1,0,-1,1,1,1,0,0,-1,-1,1,-1,-1,1,-1,1,-1)
+F. <- c(0,0,-1,1,1,-1,1,-1,1,0,-1,-1,1,-1,-1,1,1)
+G <- c(-1,0,1,0,-1,1,1,-1,1,1,-1,0,-1,1,-1,1,-1)
+H <- c(-1,0,-1,-1,1,1,-1,1,0,1,0,1,1,-1,-1,1,-1)
+
+design17.coded <- data.frame("alpha"=A, "beta"=B, "aq"=C, "d"=D, "mt"=E, "mf"=F., "pin"=G, "dzul"=H)
+print(design17.coded)
+
+# Visualize the aliasing in the design.
+D.three.level <- design17.coded # Extract the design.
+# Create the model matrix including main effects and two-factor interactions.
+X.three.level <- model.matrix(~quad(alpha,beta,aq,d,mt,mf,pin,dzul)-1, data.frame(D.three.level))
+
+# Create color map on pairwise correlations.
+contrast.vectors.correlations.three <- cor(X.three.level)
+corrplot(contrast.vectors.correlations.three, type = "full", addgrid.col = "gray",
+         tl.col = "black", tl.srt = 90, method = "color", tl.cex=0.8)
+```
+
+```{r}
+A <- c(-1,0,-1,-1,1,-1,1,-1,-1,1,1,1,-1,1,0,0,1)
+B <- c(1,0,1,-1,-1,0,1,-1,-1,-1,1,1,1,-1,-1,1,0)
+C <- c(-1,0,1,1,-1,-1,-1,1,-1,1,1,-1,0,0,-1,1,1)
+D <- c(1,0,0,-1,0,-1,-1,1,1,-1,-1,1,-1,1,-1,1,1)
+E <- c(1,0,-1,1,1,1,0,0,-1,-1,1,-1,-1,1,-1,1,-1)
+F. <- c(0,0,-1,1,1,-1,1,-1,1,0,-1,-1,1,-1,-1,1,1)
+G <- c(-1,0,1,0,-1,1,1,-1,1,1,-1,0,-1,1,-1,1,-1)
+H <- c(-1,0,-1,-1,1,1,-1,1,0,1,0,1,1,-1,-1,1,-1)
+
+data5 <- data.frame("Alpha"=A, "Beta"=B, "Aq"=C, "d"=D, "mt"=E, "mf"=F., "pin"=G, "dzul"=H)
+data5
+```
+
+
+
+## full model with factor of 3 levels
+```{r,echo=FALSE}
+candidate.set <- gen.factorial(levels = 3, nVars = 8,
+                               varNames = c("alpha","beta","aq","d","mt","mf","pin","dzul"))
+
+# 1 + 8 +8 +8(7)/2 =45runs
+three.level.design <- optFederov(~quad(alpha,beta,aq,d,mt,mf,pin,dzul), candidate.set, nTrials = 45,
+                                nRepeats = 100)
+print.data.frame(three.level.design$design)
+
+# Visualize the aliasing in the design.
+D.three.level <- three.level.design$design # Extract the design.
+str(D.three.level)
+# Create the model matrix including main effects and two-factor interactions.
+X.three.level <- model.matrix(~quad(alpha,beta,aq,d,mt,mf,pin,dzul)-1, data.frame(D.three.level))
+
+# Create color map on pairwise correlations.
+contrast.vectors.correlations.three <- cor(X.three.level)
+corrplot(contrast.vectors.correlations.three, type = "full", addgrid.col = "gray",
+         tl.col = "black", tl.srt = 90, method = "color", tl.cex=0.8)
+```
+
+
+The full design has better performance than the alternative experimental design.
+
+
+\pagebreak
+
+### Part II: Analysis of the Results
+
+
+# Data:
+
+```{r,echo=FALSE}
+data1$range <- result$range
+data1
+data2 <- data.frame(desnum(design))
+data2$consumption <- result$consumption
+data2
+```
+
+
+
+### Question 5. Collect data using your recommended design in Question 1. Conduct a detailed data analysis.
+
+### For spray range:
+
+### Full Model :
+
+```{r,echo=FALSE}
+# Model with main effects and two- way interactions
+m1.full <- lm(range ~  (.)^2, data=data1)
+aliases(m1.full)
+summary(m1.full)
+effects <- 2*(coef(m1.full)[-1])
+cat("Estimated effects: \n")
+print(effects[!is.na(effects)])
+par(mfrow=c(1,2)) 
+DanielPlot(m1.full, half = F,autolab = FALSE) 
+DanielPlot(m1.full, half = T,autolab=FALSE)
+```
+
+**The plots above suggest that alpha,pin and alpha:pin are active(significant), thus we are going to refine our model using alpha,pin and  alpha:pin.**
+
+
+### Refine Model:
+
+```{r,echo=FALSE}
+m1.simp <- lm(range ~ alpha + pin + alpha:pin,data=data1)
+summary(m1.simp)
+```
+
+
+## Model Adequacy Checking
+ 
+```{r,echo=FALSE}
+Residuals <- m1.simp$residuals
+Fitted <- m1.simp$fitted.values
+par(mfrow = c(1,2),oma = c(0, 0, 2, 0)) 
+plot(Fitted,Residuals,main="Residuals vs Fitted",pch =18,col="dark orange") 
+abline(h = mean(Residuals),lty=3,col="grey")
+qqnorm(Residuals,pch =18,col="dark orange") 
+qqline(Residuals,lty=3,col="grey") 
+```
+
+
+From the **Normal Q-Q** plot, most of the points are close to the dashed line so the residual is generally distributed as normal. The **normality assumption** is satisfied.
+
+From the **Residuals vs Fitted** plot,there is no pattern(relationship) found(i.e. residuals is distributed randomly and independently around zero), so the **constant-variance assumption** is satisfied.
+
+There is nothing unusual about the residual plots.We conclude that the assumptions for analysis of variance are satisfied. 
+
+
+
+## For consumption:
+
+```{r,echo=FALSE}
+# Model with main effects and two- way interactions
+m2.full <- lm(consumption ~  (.)^2, data=data2)
+summary(m2.full)
+aliases(m2.full)
+effects <- 2*(coef(m2.full)[-1])
+cat("Estimated effects: \n")
+print(effects[!is.na(effects)])
+par(mfrow=c(1,2)) 
+DanielPlot(m2.full, half = F) 
+DanielPlot(m2.full, half = T)
+```
+
+**The plots above suggest Aq,pin, dzul,alpha:d,alpha:mf are active(significant).However, since alpha, d and mf are inactive(insignificant), by hierarchical rule, we are going refine our model using  Aq,pin, dzul only** 
+
+
+
+### Refine Model
+
+```{r,echo=FALSE}
+m2.simp <- lm(consumption ~ Aq + pin + dzul,data=data2)
+summary(m2.simp)
+```
+
+### Model Adequacy Checking
+
+```{r,echo=FALSE}
+Residuals <- m2.simp$residuals
+Fitted <- m2.simp$fitted.values
+par(mfrow = c(1,2),oma = c(0, 0, 2, 0)) 
+plot(Fitted,Residuals,main="Residuals vs Fitted",pch =18,col="dark orange") 
+abline(h = mean(Residuals),lty=3,col="grey")
+qqnorm(Residuals,pch =18,col="dark orange") 
+qqline(Residuals,lty=3,col="grey") 
+```
+
+
+As we can see from the **Residuals vs Fitted** plot, there seems to appear a bowl curve, so the constant-variance assumption might be violated. 
+
+To be safe, we will try to use log transformation to improve the model.
+
+
+Log-transform the **consumption** :
+
+```{r,echo=FALSE}
+data2$consumption <- log(data2$consumption)
+data2
+```
+
+# Refine Model with log transformation :
+
+```{r,echo=FALSE}
+m2.simp.log <- lm(consumption ~ Aq + pin + dzul,data=data2)
+summary(m2.simp.log)
+```
+
+
+### Model Adequacy Checking
+
+```{r,echo=FALSE}
+Residuals <- m2.simp.log$residuals
+Fitted <- m2.simp.log$fitted.values
+par(mfrow = c(1,2),oma = c(0, 0, 2, 0)) 
+plot(Fitted,Residuals,main="Residuals vs Fitted",pch =18,col="dark orange") 
+abline(h = mean(Residuals),lty=3,col="grey")
+qqnorm(Residuals,pch =18,col="dark orange") 
+qqline(Residuals,lty=3,col="grey") 
+```
+
+From the **Normal Q-Q** plot, most of the points are close to the dashed line so the residual is generally distributed as normal. The **normality assumption** is satisfied.
+
+From the **Residuals vs Fitted** plot,there is no pattern(relationship) found(i.e. residuals is distributed randomly and independently around zero), so the **constant-variance assumption** is satisfied.
+
+There is nothing unusual about the residual plots.We conclude that the assumptions for analysis of variance are satisfied. The model has been improved.
+
+
+
+
+### Question 6. What are the most influential factors?
+
+
+# For range :
+
+```{r,echo=FALSE}
+anova(m1.simp)
+```
+
+**Define hypothesis test for main effects as below :**                        
+ $H_0$: The main effect[Alpha/pin] is not statistically significant           
+ $H_1$: The main effect[Alpha/pin] is statistically significant
+
+**Define hypothesis test for interaction effects as below :**                 
+ $H_0$: The interaction effect[Alpha:pin] is not statistically significant    
+ $H_1$: The interaction effect[Alpha:pin] is statistically significant
+ 
+As per the ANOVA table :                                                      
+The p-value for pin  = 0.01528 < 0.1                                          
+The p-value for alpha =  3.423e-09 < 0.001                                    
+The p-value for pin:alpha =  0.03599 < 0.05                      
+
+For the response value of **range**,we can confirm that the two-factor interaction **pin:alpha** , and factor **alpha pin** are significant.That is, alpha and pin are the most influential factors for the spray range model.
+
+
+
+
+# For consumption:
+
+```{r,echo=FALSE}
+anova(m2.simp.log)
+```
+
+
+**Define hypothesis test for main effects as below :**
+ $H_0$: The main effect[Aq/pin/dzul] is not statistically significant         
+ $H_1$: The main effect[Aq/pin/dzul] is statistically significant             
+
+As per the ANOVA table :                                                      
+The p-value for Aq  =  1.566e-15 < 0.001                                      
+The p-value for pin = 2.466e-12 < 0.001                                       
+The p-value for dzul =  1.837e-05 < 0.001                                      
+
+For the response value of **consumption**, we can confirm that the main effects **Aq pin dzul** are significant. That is, Aq, pin, dzul are the most influential factors for the water consumption model.
+
+
+
+
+### Question 7. Recommend the settings of the factors that optimize the water consumption and spray range simultaneously.
+
+
+### For range :
+
+```{r,echo=FALSE}
+MEPlot(m1.simp)
+IAPlot(m1.simp)
+```
+
+
+From the main-effects plot and the interaction plot, we recommend alpha = -1 and pin = 1 as the settings of the factors that optimize(maximize) the spray range.
+
+We can also use optim() to confirm our conslusion above.
+
+```{r,echo=FALSE}
+obj_func <- function(x){
+pred.y <- 0.144317 - 0.135281*x[1]+ 0.025209*x[2] - 0.021057*x[1]*x[2] 
+return(-1*pred.y)
+}
+
+optim(par = c(0, 0), fn = obj_func, lower = -1, upper = 1, method = "L-BFGS-B")
+```
+
+
+The results of optim() are same to the main-effects plot and the interaction plot,we recommend alpha = -1 and pin = 1 as the settings of the factors that optimize(maximize) the spray range. 
+
+
+
+
+### For Consumption :
+
+```{r,echo=FALSE}
+MEPlot(m2.simp.log)
+```
+
+From the main-effects plot, we recommend Aq = -1,pin = -1, dzul = -1 as the settings of the factors that optimize(minimize) the water consumption.
+
+We can also use optim() to confirm our conslusion above.
+
+```{r,echo=FALSE}
+obj_func <- function(x){
+pred.y <- 5.9408 + 1.8507*x[1]+ 1.0326*x[2] + 0.2714*x[3]
+return(1*pred.y)
+}
+
+optim(par = c(0, 0, 0), fn = obj_func, lower = -1, upper = 1, method = "L-BFGS-B")
+```
+
+The results of optim() are same to the main-effects plot and the interaction plot,we recommend Aq = -1,pin = -1, dzul = -1  as the settings of the factors that optimize(minimize) the water consumption. 
+
+
+### Overall 
+
+
+As we can see, the optimal setting of the factor **pin** for the range and the consumption is conflicted. To achieve a better overall quality, we would choose the setting of **pin = -1** since it has stronger affect in the consumption rather than the range. Additionally, the p-value of pin is  **2.466e-12** which is much smaller than 0.01. It is more statistically significant than the performance in the range.                                         
+
+Therefore, to minimize the water consumption and maximum the spray range simultaneously, the recommended setting of the factors should be  **Aq = -1 ; pin = -1 ;  dzul = -1 ;alpha = -1 **
+
+
+
+
+### Question 8. Conduct confirmation experiments using your recommended settings. Are your predictions accurate?
+
+According to the confirmation experiments of section 8.2 from textbook, a simple confirmation experiment is to use the model equation to predict the response at a point of interest in the design space (this should not be one of the runs in the current design) and then actually find/run that treatment combination (perhaps several times), comparing the predicted and observed responses.
+
+
+### For range :
+
+
+```{r,echo=FALSE}
+m1.simp
+```
+
+The final fitted equation for range is :
+
+$$\hat{y}=0.15532-0.13528x_1+0.02521x_7-0.02106x_1x_7$$
+where $\hat{y}$ is the predicted response  and $x_1$ and $x_7$  denote the coded 
+level of factors alpha and pin respectively.
+
+From Question 7, we know that the optimal setting of $x_1$ and $x_7$ for maximizing the spray range are -1 and -1.
+
+Then $\hat{y}=0.15532-0.13528(-1)+0.02521(-1)-0.02106(-1)(-1)=0.24433$
+
+The observed response under the condition that [alpha=pin=-1] are 0.1923676 0.2345015 0.2268677 0.3235884.
+
+```{r,echo=FALSE}
+data1[(data1$alpha==-1)&(data2$pin == -1),9]
+```
+
+We already conduct confirmation experiment for the model of "range"; comparing the predicted response 0.24433 with the observed response [0.1923676 0.2345015 0.2268677 0.3235884], there isn't big difference so we can say the prediction is accurate.
+
+
+
+### For consumption : 
+
+```{r,echo=FALSE}
+m2.simp.log
+```
+
+The final fitted equation for water consumption is :
+
+$$\hat{y}=1.71491+0.32002x_{3}+0.17243x_{7}+0.04175x_{8}$$
+where $\hat{y}$ is the log predicted response  and $x_3,x_7$ and $x_8$  denote the coded 
+level of factors Aq,pin and dzul respectively.
+
+From Question 7, we know that the optimal setting of $x_3,x_7$ and $x_8$ for minimizing the water consumption are -1,-1 and -1.
+
+Then $\hat{y}=1.71491+0.32002(-1)+0.17243(-1)+0.04175(-1)=1.18071$
+
+
+```{r,echo=FALSE}
+#exp(1.18071)
+```
+
+$e^{\hat{y}}$ = 3.256686
+
+The exponential observed response of consumption under the condition that (Aq=pin=dzul=-1) are 3.290304 3.335403
+
+```{r,echo=FALSE}
+#exp(data2[(data2$Aq==-1)&(data2$pin == -1)&(data2$dzul==-1),9])
+```
+
+We already conduct confirmation experiment for the model of "consumption"; comparing the predicted value 3.256686 with the observed value [3.290304 3.335403], they are quite close so we can say the prediction is accurate.
+
+
+
+
